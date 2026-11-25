@@ -1,13 +1,14 @@
 {
   "expo": {
-    "name": "todo",
+    "name": "Todo",
     "slug": "todo",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "todo",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "ios": {
+      "bundleIdentifier": "com.eugen.todo",
       "icon": "./assets/expo.icon"
     },
     "android": {
@@ -20,7 +21,7 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "output": "server",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
@@ -28,7 +29,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#F8F8F8",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }

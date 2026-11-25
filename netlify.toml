@@ -1,0 +1,5 @@
+# Overrides the build command saved in the Netlify UI: a plain `expo export` would leave the
+# service worker's offline file list unfilled, so the installed app could never update.
+[build]
+  command = "npm run build:web"
+  publish = "dist"
