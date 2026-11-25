@@ -76,3 +76,10 @@ export function formatTime(time: string): string {
   const hour12 = h % 12 === 0 ? 12 : h % 12;
   return `${hour12}:${String(m).padStart(2, '0')} ${suffix}`;
 }
+
+/** Local midnight at the start of today, in ms. */
+export function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}

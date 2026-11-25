@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 import type { ListColor } from '@/constants/theme';
-import { addDays, todayKey } from '@/lib/dates';
+import { addDays, startOfToday, todayKey } from '@/lib/dates';
 
 export type TodoList = {
   id: string;
@@ -25,6 +25,8 @@ export type Task = {
   time?: string;
   done: boolean;
   createdAt: number;
+  /** When the task was ticked off (ms). Decides whether it counts as finished today or moves to "earlier". */
+  completedAt?: number;
   /** Manual position set by drag-and-drop; tasks without one sort after the ones that have it. */
   order?: number;
   updatedAt: number;
@@ -42,6 +44,11 @@ type TodoState = {
   profileName: string;
   profileDirty: boolean;
 
+  /** The list the last new task was added to; the next new task defaults to it. */
+  lastListId: string | null;
+  /** False until the first-launch welcome screen has been dismissed on this device. */
+  welcomed: boolean;
+
   // --- cloud sync bookkeeping (see lib/sync.ts) ---
   tombstones: Tombstone[];
   /** True until the user changes anything: untouched sample data is replaced, not uploaded, on first sign-in. */
@@ -56,9 +63,14 @@ type TodoState = {
   deleteTask: (id: string) => void;
   /** Stores the given ids as the manual order (index = position). */
   reorderTasks: (orderedIds: string[]) => void;
+  /** Deletes finished tasks older than today (optionally only one list's). */
+  clearEarlier: (listId?: string) => void;
+  /** Housekeeping: deletes tasks that were finished more than 30 days ago. */
+  purgeOldCompleted: () => void;
   addList: (name: string, color: ListColor) => void;
   deleteList: (id: string) => void;
   setProfileName: (name: string) => void;
+  setWelcomed: () => void;
   resetAll: () => void;
 };
 
@@ -80,13 +92,15 @@ function seed() {
     tasks: [
       task(0, { title: 'Make a cup of coffee', listId: 'work', date: today, time: '10:00', done: false }),
       task(1, { title: 'Answer emails', listId: 'work', date: today, time: '11:30', done: false }),
-      task(2, { title: 'Eat breakfast', listId: 'personal', date: today, done: true }),
+      { ...task(2, { title: 'Eat breakfast', listId: 'personal', date: today, done: true }), completedAt: now },
       task(3, { title: 'Team meeting', listId: 'work', date: addDays(today, 1), time: '10:00', done: false }),
       task(4, { title: 'Go for a run', listId: 'personal', date: addDays(today, 2), time: '07:00', done: false }),
     ],
     profileName: 'Your name',
     profileDirty: false,
     tombstones: [] as Tombstone[],
+    lastListId: null as string | null,
+    welcomed: false,
     pristine: true,
     cloudUserId: null as string | null,
     cursor: null as string | null,
@@ -102,13 +116,19 @@ export const useTodoStore = create<TodoState>()(
           const now = Date.now();
           return {
             pristine: false,
+            lastListId: task.listId,
             tasks: [...s.tasks, { ...task, id: newId(), done: false, createdAt: now, updatedAt: now, dirty: true }],
           };
         }),
       toggleTask: (id) =>
         set((s) => ({
           pristine: false,
-          tasks: s.tasks.map((t) => (t.id === id ? { ...t, done: !t.done, updatedAt: Date.now(), dirty: true } : t)),
+          tasks: s.tasks.map((t) => {
+            if (t.id !== id) return t;
+            const now = Date.now();
+            const done = !t.done;
+            return { ...t, done, completedAt: done ? now : undefined, updatedAt: now, dirty: true };
+          }),
         })),
       deleteTask: (id) =>
         set((s) => ({
@@ -127,6 +147,31 @@ export const useTodoStore = create<TodoState>()(
             }),
           };
         }),
+      clearEarlier: (listId) =>
+        set((s) => {
+          const cutoff = startOfToday();
+          const gone = s.tasks.filter((t) => isEarlier(t, cutoff) && (!listId || t.listId === listId));
+          if (gone.length === 0) return {};
+          const ids = new Set(gone.map((t) => t.id));
+          const now = Date.now();
+          return {
+            pristine: false,
+            tasks: s.tasks.filter((t) => !ids.has(t.id)),
+            tombstones: [...s.tombstones, ...gone.map((t) => ({ table: 'tasks' as const, id: t.id, at: now }))],
+          };
+        }),
+      purgeOldCompleted: () =>
+        set((s) => {
+          const limit = Date.now() - PURGE_AFTER_MS;
+          const gone = s.tasks.filter((t) => t.done && (t.completedAt ?? t.updatedAt) < limit);
+          if (gone.length === 0) return {};
+          const ids = new Set(gone.map((t) => t.id));
+          const now = Date.now();
+          return {
+            tasks: s.tasks.filter((t) => !ids.has(t.id)),
+            tombstones: [...s.tombstones, ...gone.map((t) => ({ table: 'tasks' as const, id: t.id, at: now }))],
+          };
+        }),
       addList: (name, color) =>
         set((s) => ({
           pristine: false,
@@ -138,6 +183,7 @@ export const useTodoStore = create<TodoState>()(
           const removedTasks = s.tasks.filter((t) => t.listId === id);
           return {
             pristine: false,
+            lastListId: s.lastListId === id ? null : s.lastListId,
             lists: s.lists.filter((l) => l.id !== id),
             tasks: s.tasks.filter((t) => t.listId !== id),
             tombstones: [
@@ -148,18 +194,20 @@ export const useTodoStore = create<TodoState>()(
           };
         }),
       setProfileName: (profileName) => set({ profileName, profileDirty: true, pristine: false }),
-      resetAll: () => set(seed()),
+      setWelcomed: () => set({ welcomed: true }),
+      // Clearing the data (logout, delete) shouldn't bring the welcome screen back.
+      resetAll: () => set((s) => ({ ...seed(), welcomed: s.welcomed })),
     }),
     {
       name: 'todo-store',
-      version: 2,
+      version: 3,
       storage: createJSONStorage(() => AsyncStorage),
-      // v1 had no sync bookkeeping: treat everything already on the device as real, not-yet-uploaded data.
       migrate: (persisted, version) => {
-        const s = persisted as Partial<TodoState>;
+        let s = persisted as Partial<TodoState>;
+        // v1 had no sync bookkeeping: treat everything already on the device as real, not-yet-uploaded data.
         if (version < 2) {
           const now = Date.now();
-          return {
+          s = {
             ...s,
             lists: (s.lists ?? []).map((l) => ({ ...l, updatedAt: now, dirty: true })),
             tasks: (s.tasks ?? []).map((t) => ({ ...t, updatedAt: now, dirty: true })),
@@ -168,13 +216,31 @@ export const useTodoStore = create<TodoState>()(
             pristine: false,
             cloudUserId: null,
             cursor: null,
-          } as TodoState;
+          };
+        }
+        // v3 records when tasks were finished: tasks already done count as finished at their last change.
+        if (version < 3) {
+          s = {
+            ...s,
+            tasks: (s.tasks ?? []).map((t) => (t.done && t.completedAt == null ? { ...t, completedAt: t.updatedAt, dirty: true } : t)),
+          };
         }
         return s as TodoState;
       },
     },
   ),
 );
+
+const PURGE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** When a done task was finished (tasks from before this was recorded fall back to their last change). */
+export const finishedAt = (t: Task) => t.completedAt ?? t.updatedAt;
+
+/** Done today: shown in the Today screen's and each list's "completed" section. */
+export const isFinishedToday = (t: Task, since = startOfToday()) => t.done && finishedAt(t) >= since;
+
+/** Done on an earlier day: tucked away in the collapsed "Earlier" section. */
+export const isEarlier = (t: Task, before = startOfToday()) => t.done && finishedAt(t) < before;
 
 /** Tasks ordered for display: manual order first, then by date, timed tasks by time, then by creation. */
 export function sortTasks(tasks: Task[]): Task[] {

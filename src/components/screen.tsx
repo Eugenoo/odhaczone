@@ -16,21 +16,23 @@ type ScreenProps = {
   onBackgroundPress?: () => void;
   /** Overrides the space below the content (e.g. to keep it clear of a keyboard + docked bar) and scrolls to the end. */
   bottomPadding?: number;
+  /** When `bottomPadding` changes, scroll to the end so the last content is visible (default true). */
+  scrollOnPadding?: boolean;
   children: ReactNode;
 };
 
-export function Screen({ label, title, headerRight, contentGap = 20, onBackgroundPress, bottomPadding, children }: ScreenProps) {
+export function Screen({ label, title, headerRight, contentGap = 20, onBackgroundPress, bottomPadding, scrollOnPadding = true, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const top = Platform.OS === 'web' ? 34 : insets.top + 16;
-  const navClearance = Layout.navBarHeight + Math.max(insets.bottom, Layout.navBarBottomInset) + Layout.navBarLift + 48;
+  const navClearance = Layout.navBarHeight + Math.max(insets.bottom, Layout.navBarBottomInset) + Layout.navBarLift + 80; // 80: content rests above the fade, not inside it
   const bottom = bottomPadding ?? navClearance;
 
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   useEffect(() => {
-    if (bottomPadding === undefined) return;
+    if (bottomPadding === undefined || !scrollOnPadding) return;
     const t = setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
     return () => clearTimeout(t);
-  }, [bottomPadding]);
+  }, [bottomPadding, scrollOnPadding]);
 
   const body = (
     <>

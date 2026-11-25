@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { usePathname } from 'expo-router';
+import { useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { ProgressRing } from '@/components/progress-ring';
@@ -7,7 +8,8 @@ import { SortableTasks } from '@/components/sortable-tasks';
 import { TaskRow } from '@/components/task-row';
 import { Colors, Fonts } from '@/constants/theme';
 import { formatShortDate, todayKey } from '@/lib/dates';
-import { sortTasks, useTodoStore } from '@/store/todo-store';
+import { isFinishedToday, sortTasks, useTodoStore } from '@/store/todo-store';
+import { useUiStore } from '@/store/ui-store';
 
 /** "Main" frame: today's tasks (plus overdue ones), progress, and what's done today. */
 export default function TodayScreen() {
@@ -18,12 +20,25 @@ export default function TodayScreen() {
     const sorted = sortTasks(tasks);
     return {
       open: sorted.filter((t) => !t.done && t.date <= today),
-      done: sorted.filter((t) => t.done && t.date === today),
+      // Everything finished today counts, whatever date it was planned for (e.g. an overdue task from yesterday).
+      done: sorted.filter((t) => isFinishedToday(t)),
     };
   }, [tasks, today]);
 
-  const todayTotal = open.filter((t) => t.date === today).length + done.length;
-  const progress = todayTotal === 0 ? 0 : done.length / todayTotal;
+  // Progress = finished today out of everything that was due today or overdue.
+  const total = open.length + done.length;
+  const progress = total === 0 ? 0 : done.length / total;
+
+  // Celebrate when the last open task gets ticked off: the list just became empty AND one more task is done
+  // (so deleting the last task, or opening the app with nothing left, doesn't trigger it).
+  const celebrate = useUiStore((s) => s.celebrate);
+  const focused = usePathname() === '/'; // this screen stays mounted under a list page; only celebrate when visible
+  const previous = useRef({ open: open.length, done: done.length });
+  useEffect(() => {
+    const before = previous.current;
+    previous.current = { open: open.length, done: done.length };
+    if (focused && before.open > 0 && open.length === 0 && done.length > before.done) celebrate();
+  }, [open.length, done.length, celebrate, focused]);
 
   return (
     <Screen

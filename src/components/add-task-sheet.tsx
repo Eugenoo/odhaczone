@@ -36,10 +36,11 @@ type AddTaskSheetProps = {
 export function AddTaskSheet({ width, bottom, onClose }: AddTaskSheetProps) {
   const lists = useTodoStore((s) => s.lists);
   const addTask = useTodoStore((s) => s.addTask);
+  const lastListId = useTodoStore((s) => s.lastListId);
 
   const [title, setTitle] = useState('');
-  const [listId, setListId] = useState(lists[0]?.id ?? '');
-  const [listOpen, setListOpen] = useState(false);
+  // Starts on the list used for the previous task (if it still exists), else the first list.
+  const [listId, setListId] = useState(() => lists.find((l) => l.id === lastListId)?.id ?? lists[0]?.id ?? '');
   const [date, setDate] = useState(todayKey);
   const [time, setTime] = useState<string | undefined>();
 
@@ -97,17 +98,10 @@ export function AddTaskSheet({ width, bottom, onClose }: AddTaskSheetProps) {
               autoFocus
             />
 
-            <Pressable style={styles.pill} onPress={() => setListOpen((o) => !o)}>
-              {selectedList ? (
-                <View style={styles.pillRow}>
-                  <View style={[styles.dot, { backgroundColor: ListColors[selectedList.color].strong }]} />
-                  <Text style={styles.pillText}>{selectedList.name}</Text>
-                </View>
-              ) : (
-                <Text style={styles.placeholder}>list</Text>
-              )}
-            </Pressable>
-            {listOpen && (
+            <Text style={styles.label}>list</Text>
+            {lists.length === 0 ? (
+              <Text style={styles.placeholder}>Create a list in the Lists tab first.</Text>
+            ) : (
               <ChipRow>
                 {lists.map((l) => (
                   <Chip
@@ -115,10 +109,7 @@ export function AddTaskSheet({ width, bottom, onClose }: AddTaskSheetProps) {
                     label={l.name}
                     color={ListColors[l.color].light}
                     selected={l.id === listId}
-                    onPress={() => {
-                      setListId(l.id);
-                      setListOpen(false);
-                    }}
+                    onPress={() => setListId(l.id)}
                   />
                 ))}
               </ChipRow>
@@ -191,7 +182,7 @@ function Chip({
         color ? { backgroundColor: color } : null,
         selected && styles.chipSelected,
       ]}>
-      <Text style={[styles.chipText, selected && !color && styles.chipTextSelected]}>{label}</Text>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
     </Pressable>
   );
 }
@@ -232,25 +223,11 @@ const styles = StyleSheet.create({
     outlineStyle: 'solid',
     outlineWidth: 0,
   },
-  pillRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  pillText: {
-    fontFamily: Fonts.regular,
-    fontSize: 20,
-    color: Colors.text,
-  },
   placeholder: {
     fontFamily: Fonts.regular,
-    fontSize: 20,
+    fontSize: 16,
     color: Colors.textSecondary,
-  },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
+    textAlign: 'center',
   },
   label: {
     fontFamily: Fonts.regular,

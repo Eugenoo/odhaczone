@@ -20,7 +20,13 @@ const files = [];
   }
 })(dist);
 
-const hash = crypto.createHash('sha1').update(files.join('\n')).digest('hex').slice(0, 10);
+// Fingerprint names AND contents, so changing a file that keeps its name (an icon, say) still updates the cache.
+const hasher = crypto.createHash('sha1');
+for (const f of files) {
+  hasher.update(f);
+  hasher.update(fs.readFileSync(path.join(dist, ...decodeURIComponent(f).split('/'))));
+}
+const hash = hasher.digest('hex').slice(0, 10);
 const swPath = path.join(dist, 'sw.js');
 const before = fs.readFileSync(swPath, 'utf8');
 const sw = before

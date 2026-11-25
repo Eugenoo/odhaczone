@@ -6,8 +6,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AddTaskSheet } from '@/components/add-task-sheet';
 import { BottomNav, TABS } from '@/components/bottom-nav';
+import { NavFade } from '@/components/nav-fade';
 import { Layout } from '@/constants/theme';
 import { useUiStore } from '@/store/ui-store';
+
+/** Where the fade ends above the + button's top edge, in px. */
+const FADE_ABOVE_BUTTON = 36;
 
 export default function TabsLayout() {
   const [adding, setAdding] = useState(false);
@@ -46,6 +50,8 @@ export default function TabsLayout() {
       </TabList>
 
       <Animated.View style={slideStyle} pointerEvents={slidePointer}>
+        {/* Solid behind the bar, softening into the page ~35px above the + button's top edge. */}
+        <NavFade height={navTop + Layout.mainButtonSize / 2 + FADE_ABOVE_BUTTON} />
         <BottomNav width={navWidth} bottom={navBottom} />
       </Animated.View>
 

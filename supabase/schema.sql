@@ -1,4 +1,7 @@
--- Todo app schema (v2). Run in Supabase: SQL Editor -> New query -> paste -> Run.
+-- Todo app schema (v2) for a FRESH project. Run in Supabase: SQL Editor -> New query -> paste -> Run.
+--
+-- WARNING: this file DROPS and recreates the tables, which deletes all data. Never re-run it on a project that
+-- already has data; apply the files in supabase/migrations/ instead.
 --
 -- Every row belongs to one user, and row level security (RLS) makes sure people can only ever see and change
 -- their own rows. The app's public key is safe to ship because of these policies.
@@ -31,6 +34,7 @@ create table public.tasks (
   done        boolean not null default false,
   position    double precision,      -- manual drag-and-drop order
   created_at  bigint not null,
+  completed_at bigint,               -- when the task was ticked off (ms since epoch)
   updated_at  timestamptz not null default now(),
   deleted_at  timestamptz,
   primary key (user_id, id)

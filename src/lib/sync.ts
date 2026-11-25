@@ -30,6 +30,7 @@ type TaskRow = {
   done: boolean;
   position: number | null;
   created_at: number;
+  completed_at: number | null;
   updated_at: string;
   deleted_at: string | null;
 };
@@ -207,6 +208,7 @@ async function push(uid: string) {
         done: t.done,
         position: t.order ?? null,
         created_at: t.createdAt,
+        completed_at: t.completedAt ?? null,
         deleted_at: null,
       })),
       { onConflict: 'user_id,id' },
@@ -295,6 +297,8 @@ function applyRemote(remote: Remote) {
           done: r.done,
           order: r.position ?? undefined,
           createdAt: Number(r.created_at),
+          // Rows finished before completed_at existed fall back to their last server change.
+          completedAt: r.done ? (r.completed_at != null ? Number(r.completed_at) : Date.parse(r.updated_at)) : undefined,
           updatedAt: Date.parse(r.updated_at),
         });
       }
